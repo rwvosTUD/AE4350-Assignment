@@ -403,13 +403,13 @@ class Agent:
             msg = "reward neutralizing unclosed positions and rewarding profits"
             self.get_reward = self._reward_type2
         elif rewardType == 3:
-            msg = "terminal reward and penalty for buy hold"
+            msg = "terminal reward and penalty for buy hold, no intermediary"
             self.get_reward = self._reward_type3
         elif rewardType == 4:
-            msg = "terminal reward only, no intermediate rewards"
+            msg = "Terminal reward and intermediary rewards"
             self.get_reward = self._reward_type4
         elif rewardType == 5:
-            msg = "EXPERIMENTAL - TODO adjust description"
+            msg = "Only intermediate rewards no terminal reward"
             self.get_reward = self._reward_type5
         print("Reward function description: "+msg)
     
@@ -460,7 +460,7 @@ class Agent:
     def _reward_type4(self, agent, profit: float, 
                       util_lst: list, last: bool):
         '''
-        Terminal reward only, no intermediate rewards
+        Terminal reward and intermediary rewards
         '''
         pt = util_lst[0] 
         pt1 = util_lst[1]
@@ -481,7 +481,7 @@ class Agent:
     def _reward_type5(self, agent, profit: float, 
                       util_lst: list, last: bool):
         '''
-        Terminal reward only, no intermediate rewards
+        Only intermediate rewards no terminal reward
         EXPERIMENTAL; also some small intermediary rewards based on 
         https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7384672/
         '''
@@ -508,8 +508,11 @@ def formatPrice(n):
         curr = "-$"
     return (curr +"{0:.2f}".format(abs(n)))
 
-def getData(key: str, window: int) -> np.array:
-    data = pd.read_csv("data/" + key + ".csv")
+def getData(key: str, window: int, colab = False) -> np.array:
+    if colab:
+        data = pd.read_csv("AE4350_Assignment/data/" + key + ".csv")
+    else:
+        data = pd.read_csv("data/" + key + ".csv")
     data = data["Close*"].to_numpy()
     data = data[::-1] # reverse because first date is latest
     # moving average 
