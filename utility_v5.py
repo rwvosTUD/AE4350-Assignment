@@ -23,7 +23,7 @@ class Actor:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, hidden_units, regularizer):
         '''
         Initialize parameters and build model.
         Params
@@ -33,15 +33,17 @@ class Actor:
         '''
         self.state_size = state_size
         self.action_size = action_size
+        self.hidden_units = hidden_units
+        self.regularizer = regularizer
         self.build_model()
 
     def build_model(self):
         states = tf.keras.layers.Input(shape=(self.state_size,), name='states')
         
-        net = tf.keras.layers.Dense(units=32,kernel_regularizer=tf.keras.regularizers.l2(1e-6))(states)
+        net = tf.keras.layers.Dense(units=self.hidden_units[0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
         net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
-        net = tf.keras.layers.Dense(units=64,kernel_regularizer=tf.keras.regularizers.l2(1e-6))(net)
+        net = tf.keras.layers.Dense(units=self.hidden_units[1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
         net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
 
@@ -109,7 +111,7 @@ class Critic:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, hidden_units, regularizer):
         '''
         Initialize parameters and build model.
         Params
@@ -119,6 +121,8 @@ class Critic:
         '''
         self.state_size = state_size
         self.action_size = action_size
+        self.hidden_units = hidden_units
+        self.regularizer = regularizer
         self.build_model()
 
     def build_model(self):
@@ -127,13 +131,13 @@ class Critic:
         actions = tf.keras.layers.Input(shape=(self.action_size,), name='actions')
         
         # 
-        net_states = tf.keras.layers.Dense(units=32,kernel_regularizer=tf.keras.regularizers.l2(1e-6))(states)
+        net_states = tf.keras.layers.Dense(units=self.hidden_units[2],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
         net_states = tf.keras.layers.BatchNormalization()(net_states)
         net_states = tf.keras.layers.Activation("relu")(net_states)
-        net_states = tf.keras.layers.Dense(units=64,kernel_regularizer=tf.keras.regularizers.l2(1e-6))(net_states)
+        net_states = tf.keras.layers.Dense(units=self.hidden_units[3],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net_states)
         
         # 
-        net_actions = tf.keras.layers.Dense(units=64,kernel_regularizer=tf.keras.regularizers.l2(1e-6))(actions)
+        net_actions = tf.keras.layers.Dense(units=self.hidden_units[3],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(actions)
         net = tf.keras.layers.Add()([net_states, net_actions])
         net = tf.keras.layers.Activation('relu')(net)
         
@@ -216,7 +220,9 @@ class Agent:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''    
-    def __init__(self, state_size, batch_size, start_price, n_budget, is_terminal_threshold, 
+    def __init__(self, state_size, batch_size,
+                 hidden_units, regularizer,
+                 start_price, n_budget, is_terminal_threshold, 
                  checkpoint_dir: str,rewardType = 1, data_extraWindow = 1, is_eval = False):
         self.state_size = state_size+3 # +3 for the balance, inventory and portfolio state
         self.action_size = 3
@@ -235,6 +241,8 @@ class Agent:
         self.actor_local_loss = 1.
         self.rewardType = rewardType
         self.data_extraWindow = data_extraWindow
+        self.hidden_units = hidden_units
+        self.regularizer = regularizer
         self.attr_dct = copy.deepcopy(self.__dict__) # setup attirbute dictionary thusfar
         
         self.checkpoint_dir = checkpoint_dir
@@ -253,11 +261,11 @@ class Agent:
         self.reset(start_price)
         self.set_rewardtype(self.rewardType)
         self.memory = ReplayBuffer(self.state_size, self.action_size, self.buffer_size, self.batch_size)
-        self.actor_local = Actor(self.state_size, self.action_size)
-        self.actor_target = Actor(self.state_size, self.action_size)
+        self.actor_local = Actor(self.state_size, self.action_size, self.hidden_units, self.regularizer)
+        self.actor_target = Actor(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
 
-        self.critic_local = Critic(self.state_size, self.action_size)
-        self.critic_target = Critic(self.state_size, self.action_size)
+        self.critic_local = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
+        self.critic_target = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
         
         self.critic_target.model.set_weights(self.critic_local.model.get_weights())
         self.actor_target.model.set_weights(self.actor_local.model.get_weights())
