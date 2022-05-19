@@ -485,7 +485,7 @@ class Agent:
         
         if last:
             reward = agent.balance+agent.inventory_value - agent.n_budget*pt
-            if reward > 0:
+            if reward == 0:
                 reward = -1000 # to avoid buy and hold itself
         return reward
     
@@ -524,15 +524,26 @@ class Agent:
         n_trades = util_lst[4]
         
         reward = 0
+
         p_val = agent.balance + agent.inventory_value # portfolio value
         bh_val = pt*agent.n_budget # buy hold value
+        '''
+        ratio = (p_val/bh_val)
         
-        reward = profit*(p_val/bh_val)
-        if n_trades == 0 and last:
-            reward = -10000 # buy hold
+        if ratio <= 1:
+            reward = max(0,profit)
+        else:
+            reward = profit
         '''
-        todo; maybe add the final reward, i.e. if last statement
-        '''
+        
+        reward = profit
+        if last:
+            if n_trades == 0:
+                reward = -10000 # buy hold
+            else:
+                p_val = agent.balance + agent.inventory_value # portfolio value
+                bh_val = pt*agent.n_budget # buy hold value
+                reward = p_val-bh_val
         return reward
 
 #%%
