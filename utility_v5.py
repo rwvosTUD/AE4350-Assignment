@@ -419,6 +419,9 @@ class Agent:
         elif rewardType == 5:
             msg = "Only intermediate rewards no terminal reward"
             self.get_reward = self._reward_type5
+        elif rewardType == 6:
+            msg = "EXPERIMENTAL; change description"
+            self.get_reward = self._reward_type6
         print("Reward function description: "+msg)
     
     def _reward_type0(self, profit: float, 
@@ -503,6 +506,30 @@ class Agent:
         
         reward = (1+at*(pt-pt1)/pt1)*(pt1/ptn)
 
+        '''
+        todo; maybe add the final reward, i.e. if last statement
+        '''
+        return reward
+    
+    
+    def _reward_type6(self, agent, profit: float, 
+                      util_lst: list, last: bool):
+        '''
+        EXPERIMENTAL; change description
+        '''
+        pt = util_lst[0] 
+        pt1 = util_lst[1]
+        ptn = util_lst[2]
+        at = util_lst[3]
+        n_trades = util_lst[4]
+        
+        reward = 0
+        p_val = agent.balance + agent.inventory_value # portfolio value
+        bh_val = pt*agent.n_budget # buy hold value
+        
+        reward = profit*(p_val/bh_val)
+        if n_trades == 0 and last:
+            reward = -10000 # buy hold
         '''
         todo; maybe add the final reward, i.e. if last statement
         '''
