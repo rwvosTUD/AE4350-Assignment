@@ -559,7 +559,7 @@ class Agent:
         n_trades = util_lst[4]
         
         
-        penalty = -100
+        penalty = -1000
         reward = 0
 
         p_val = agent.balance + agent.inventory_value # portfolio value
