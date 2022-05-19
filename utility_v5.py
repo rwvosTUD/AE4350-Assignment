@@ -568,6 +568,7 @@ class Agent:
         bh_val = pt*agent.n_budget # buy hold value
         n_invent = len(agent.inventory) # stocks in inventory
         if at == 2:
+            # sell action
             if profit == 0 and n_trades != 0:
                 # sale action while we dont have a stock IMPOSSIBLE, i.e. profit == 0 since we didnt enter if statement
                 # n_trades != 0: is used for the fact that we can sell at timestep 1
@@ -577,12 +578,20 @@ class Agent:
                 # sale; reward the profit 
                 reward = profit*(p_val/bh_val) # scaling to avoid the profit reward from overtaking the final reward
         elif at == 0:
-            # hold position; reward growth
-            reward = (pt-pt1)*n_invent*(p_val/bh_val) # notice if n_invent = 0, this equals zero
+            # hold position; 
+            if n_invent != 0:
+                # in case stock is held reward growth
+                reward = (pt-pt1)*n_invent*(p_val/bh_val) # notice if n_invent = 0, this equals zero
+            else:
+                # in case stock is NOT held reward based on difference of portfolio to buyhold
+                reward = p_val - bh_val
             
         elif at == 1 and n_invent == 1:  
             # buy action while we already had stock, IMPOSSIBLE
             reward = penalty
+            
+
+            
         
             
         if last:
