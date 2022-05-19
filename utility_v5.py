@@ -584,7 +584,7 @@ class Agent:
                 reward = (pt-pt1)*n_invent*(p_val/bh_val) # notice if n_invent = 0, this equals zero
             else:
                 # in case stock is NOT held introduce an opportunity cost or reward
-                reward = -1*(pt-pt1)*n_invent*(p_val/bh_val)
+                reward = -1*(pt-pt1)*(p_val/bh_val)
             
         elif at == 1 and n_invent == 1:  
             # buy action while we already had stock, IMPOSSIBLE
