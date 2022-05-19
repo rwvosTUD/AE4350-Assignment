@@ -536,7 +536,7 @@ class Agent:
             reward = profit
         '''
         
-        reward = profit
+        reward = profit*0.1 # scaling to avoid the profit reward from overtaking the final reward
         if last:
             if n_trades == 0:
                 reward = -10000 # buy hold
