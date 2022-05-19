@@ -420,8 +420,11 @@ class Agent:
             msg = "Only intermediate rewards no terminal reward"
             self.get_reward = self._reward_type5
         elif rewardType == 6:
-            msg = "EXPERIMENTAL; change description"
+            msg = "EXPERIMENTAL; reward 6 change description"
             self.get_reward = self._reward_type6
+        elif rewardType == 7:
+            msg = "EXPERIMENTAL; ONLY USE FOR N = 1"
+            self.get_reward = self._reward_type7
         print("Reward function description: "+msg)
     
     def _reward_type0(self, profit: float, 
@@ -525,8 +528,6 @@ class Agent:
         
         reward = 0
 
-        p_val = agent.balance + agent.inventory_value # portfolio value
-        bh_val = pt*agent.n_budget # buy hold value
         '''
         ratio = (p_val/bh_val)
         
@@ -544,6 +545,52 @@ class Agent:
                 p_val = agent.balance + agent.inventory_value # portfolio value
                 bh_val = pt*agent.n_budget # buy hold value
                 reward = p_val-bh_val
+        return reward
+    
+    def _reward_type7(self, agent, profit: float, 
+                      util_lst: list, last: bool):
+        '''
+        EXPERIMENTAL; change description
+        '''
+        pt = util_lst[0] # price
+        pt1 = util_lst[1] # prev price
+        ptn = util_lst[2] 
+        at = util_lst[3] # action 
+        n_trades = util_lst[4]
+        
+        
+        penalty = -100
+        reward = 0
+
+        p_val = agent.balance + agent.inventory_value # portfolio value
+        bh_val = pt*agent.n_budget # buy hold value
+        n_invent = len(agent.inventory) # stocks in inventory
+        if at == 2:
+            # sale; reward the profit 
+            reward = profit*(p_val/bh_val) # scaling to avoid the profit reward from overtaking the final reward
+        elif at == 0:
+            # hold position; reward growth
+            reward = (pt-pt1)*n_invent*(p_val/bh_val) # notice if n_invent = 0, this equals zero
+            
+        # impossible cases:
+        elif at == 2 and profit == 0:
+            # sale action while we dont have a stock, i.e. profit == 0
+            reward = penalty
+            # note, yes this could trigger with a sale as well, but higly unlikely
+        elif at == 1 and n_invent == 1:  
+            # buy action while we already had stock
+            reward = penalty
+            
+            
+        if last:
+            if n_trades == 0:
+                reward = -10000 # buy hold
+            '''
+            else:
+                p_val = agent.balance + agent.inventory_value # portfolio value
+                bh_val = pt*agent.n_budget # buy hold value
+                reward = p_val-bh_val
+            '''
         return reward
 
 #%%
