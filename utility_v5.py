@@ -40,13 +40,19 @@ class Actor:
     def build_model(self):
         states = tf.keras.layers.Input(shape=(self.state_size,), name='states')
         
-        net = tf.keras.layers.Dense(units=self.hidden_units[0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
+        net = tf.keras.layers.Dense(units=self.hidden_units[0][0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
         net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
-        net = tf.keras.layers.Dense(units=self.hidden_units[1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
+        net = tf.keras.layers.Dense(units=self.hidden_units[0][1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
+        net = tf.keras.layers.BatchNormalization()(net)
+        net = tf.keras.layers.Activation("relu")(net)
+        # additional layers
+
+        net = tf.keras.layers.Dense(units=self.hidden_units[0][2],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
         net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
 
+        
         actions = tf.keras.layers.Dense(units=self.action_size, activation='softmax', name = 'actions')(net)
         self.model = tf.keras.models.Model(inputs=states, outputs=actions)
         self.optimizer = tf.keras.optimizers.Adam(lr=.00001)
@@ -131,13 +137,19 @@ class Critic:
         actions = tf.keras.layers.Input(shape=(self.action_size,), name='actions')
         
         # 
-        net_states = tf.keras.layers.Dense(units=self.hidden_units[2],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
+        net_states = tf.keras.layers.Dense(units=self.hidden_units[1][0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
         net_states = tf.keras.layers.BatchNormalization()(net_states)
         net_states = tf.keras.layers.Activation("relu")(net_states)
-        net_states = tf.keras.layers.Dense(units=self.hidden_units[3],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net_states)
+        net_states = tf.keras.layers.Dense(units=self.hidden_units[1][1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net_states)
+        '''
+        # additiona layers
+        net = tf.keras.layers.Dense(units=self.hidden_units[1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
+        net = tf.keras.layers.BatchNormalization()(net)
+        net = tf.keras.layers.Activation("relu")(net)
+        '''
         
         # 
-        net_actions = tf.keras.layers.Dense(units=self.hidden_units[3],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(actions)
+        net_actions = tf.keras.layers.Dense(units=self.hidden_units[1][1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(actions)
         net = tf.keras.layers.Add()([net_states, net_actions])
         net = tf.keras.layers.Activation('relu')(net)
         
@@ -224,7 +236,7 @@ class Agent:
                  hidden_units, regularizer,
                  start_price, n_budget, is_terminal_threshold, 
                  checkpoint_dir: str,rewardType = 1, data_extraWindow = 1, is_eval = False):
-        self.state_size = state_size+3 # +3 for the balance, inventory and portfolio state
+        self.state_size = state_size+5 # +5 for additional states, see get_state
         self.action_size = 3
         self.buffer_size = 1000000
         self.batch_size = batch_size
@@ -281,6 +293,7 @@ class Agent:
     
     def update_inventory(self,cur_price: float):
         self.inventory_value = len(self.inventory)*cur_price # current value of sum of stocks
+        # notice that we dont change the buy prices of stocks in self.inventory!
         
     def check_threshold(self):
         is_terminal = False
@@ -295,24 +308,48 @@ class Agent:
     def reset(self, start_price):
         self.balance = 0.
         self.inventory = [start_price]*self.n_budget
+        # inventory contains price at which BOUGHT, and is not updated which cur_price
         self.inventory_value = start_price*self.n_budget
-        self.inventory_ma = []
+        self.inventory_conj = [] 
+        # conjugate of inventory, contains price at which we SOLD
+        self.r_util = np.zeros(10)
         
     '''
     ======================== MODEL RELATED ===============================
     ''' 
         
-    def act(self, state):
+    def act(self, state, utils: list):
         '''
          Returns an action, given a state, using the actor (policy network) and
         the output of the softmax layer of the actor-network, returning the
         probability for each action.
 
+
+        NOTE; because some actions are impossible but proposed through 
+        the exploration sheme it is important to ensure that if the system does 
+        not follow the greedy action (the output of argmax), the explorative 
+        action is at least possible! otherwise we rake up reward penalties
         '''
         actions_prob = self.actor_local.model.predict(state)
         self.last_state = state
         if not self.is_eval:
-            action = choice(range(3), p = actions_prob[0])
+            prob = utils[0]
+            price = utils[1]
+            
+            action = choice(range(3), p = actions_prob[0]) 
+            
+            # avoiding impossible
+            if action == 1:                
+                if len(self.inventory) == 0 and self.balance > price:
+                    b = 1
+                else:
+                    action = 0 
+            elif action == 2:
+                if len(self.inventory) > 0:
+                    b = 1
+                else:
+                    # otherwise would be impossible 
+                    action = 0 
         else:
             action = np.argmax(actions_prob[0])
         return action, actions_prob
@@ -326,7 +363,6 @@ class Agent:
         '''
         self.memory.add(self.last_state, action, reward, next_state, done)
         if len(self.memory) > self.batch_size:
-            #print("==============YES============")
             experiences = self.memory.sample(self.batch_size)
             self.learn(experiences)
             self.last_state = next_state
@@ -401,6 +437,9 @@ class Agent:
         https://ai.stackexchange.com/questions/22851/what-are-some-best-practices-when-trying-to-design-a-reward-function
     '''
     def set_rewardtype(self, rewardType: int):
+        
+        self.r_util = np.zeros(10) # utility variable for every reward type if necessayr
+        
         if rewardType == 0:
             msg = "basic reward function of format max(profit,0)"
             self.get_reward = self._reward_type0
@@ -425,7 +464,20 @@ class Agent:
         elif rewardType == 7:
             msg = "EXPERIMENTAL; ONLY USE FOR N = 1"
             self.get_reward = self._reward_type7
+        elif rewardType == 8:
+            msg = "Reward to learn trading, avoiding impossible actions"
+            self.get_reward = self._reward_type8
         print("Reward function description: "+msg)
+    
+    def switch_rewardType(self, switch: int, switch_episode: int, episode: int):
+        '''
+        Function to switch from reward type during training
+        '''
+        if episode == switch_episode:
+            
+            print("Switching from rewardtype {0} to {1}".format(self.rewardType,switch))
+            self.set_rewardtype(switch)
+            self.rewardType = switch
     
     def _reward_type0(self, profit: float, 
                       util_lst: list, last: bool):
@@ -547,6 +599,7 @@ class Agent:
                 reward = p_val-bh_val
         return reward
     
+    
     def _reward_type7(self, agent, profit: float, 
                       util_lst: list, last: bool):
         '''
@@ -556,114 +609,224 @@ class Agent:
         pt1 = util_lst[1] # prev price
         ptn = util_lst[2] 
         at = util_lst[3] # action 
-        n_trades = util_lst[4]
+        n_trades = util_lst[4] # total number of trades during run
+        n_holds = util_lst[5] # concurrent holds, resets after a sell/buy
+        impossible = util_lst[6] # invalid action 
+        l = util_lst[7] # length of data
         
-        
-        penalty = -1000
+        penalty = -1000000
         trades_threshold = 3 # at least howmany sales (buys not counted)!
+        power = 0
+        hold_scale = 10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
 
         reward = 0
+        #if n_trades != 0:
+        if True: 
+            '''
+            first if statement can be extended to all undesired strategies, 
+            (rewarding zero reward from the start), these include:
+                - n_trades == 0: buy hold 
+                - 
+                - 
+                - 
+                - 
+            '''
+            
+            
+            p_val = agent.balance + agent.inventory_value # portfolio value
+            bh_val = pt*agent.n_budget # buy hold value
+            ratio = (p_val/bh_val)**power # to distinguish between attempt, not necessarily within an attempt
+            
+            if at == 0:
+                # hold position; 
+                n_invent = len(agent.inventory) # stocks in inventory
+                hold_penalty = (-np.exp((n_holds)/l*hold_scale)+1)
+                
+                if n_invent != 0:
+                    # in case stock is held; reward growth
+                    reward = (pt-pt1)*n_invent*ratio + hold_penalty # notice if n_invent = 0, this equals zero
+                else:
+                    # in case stock is NOT held; introduce an opportunity cost or reward
+                    reward = -1*(pt-pt1)*ratio
+                
+            elif at == 1:
+                if impossible:  
+                    # buy action while we already had stock, IMPOSSIBLE
+                    reward = penalty
+                else:
+                    # buy; reward the conjugate profit 
+                    reward = profit*ratio # scaling to avoid the profit reward from overtaking the final reward
+                    
+            elif at == 2:
+                # sell action
+                if impossible:
+                    # sale action while we dont have a stock IMPOSSIBLE
+                    reward = penalty
+                    # note, yes this could trigger with a sale as well, but higly unlikely
+                else:
+                    # sale; reward the profit 
+                    reward = profit*ratio # scaling to avoid the profit reward from overtaking the final reward
+            '''
+            # TESTINGGGG ================
+            if reward != penalty:
+                # TODO REMOVE
+                reward = max(0,reward)
+            '''
 
-        p_val = agent.balance + agent.inventory_value # portfolio value
-        bh_val = pt*agent.n_budget # buy hold value
-        n_invent = len(agent.inventory) # stocks in inventory
-        if at == 2:
-            # sell action
-            if profit == 0 and n_trades != 0:
-                # sale action while we dont have a stock IMPOSSIBLE, i.e. profit == 0 since we didnt enter if statement
-                # n_trades != 0: is used for the fact that we can sell at timestep 1
-                reward = penalty
-                # note, yes this could trigger with a sale as well, but higly unlikely
-            else:
-                # sale; reward the profit 
-                reward = profit*(p_val/bh_val) # scaling to avoid the profit reward from overtaking the final reward
-        elif at == 0:
-            # hold position; 
-            if n_invent != 0:
-                # in case stock is held reward growth
-                reward = (pt-pt1)*n_invent*(p_val/bh_val) # notice if n_invent = 0, this equals zero
-            else:
-                # in case stock is NOT held introduce an opportunity cost or reward
-                reward = -1*(pt-pt1)*(p_val/bh_val)
-            
-        elif at == 1 and n_invent == 1:  
-            # buy action while we already had stock, IMPOSSIBLE
-            reward = penalty
-            
+        else:
+            self.r_util[0] += 1 # timestep   
+            cutoff = 800
+            reward = min(-1*np.exp((self.r_util[0]-cutoff)*0.014)+1,0) # exponential decay starting at cutoff
 
-            
+
+        return reward/1000
+    
+    
+    
+    def _reward_type8(self, agent, profit: float, 
+                      util_lst: list, last: bool):
+        '''
+        Reward function focussed on learning agent trading is good, 
+        but not to make impossible trades
+        '''
+        pt = util_lst[0] # price
+        pt1 = util_lst[1] # prev price
+        ptn = util_lst[2] 
+        at = util_lst[3] # action 
+        n_trades = util_lst[4] # total number of trades during run
+        n_holds = util_lst[5] # concurrent holds, resets after a sell/buy
+        impossible = util_lst[6] # invalid action 
         
-            
-        if last:
-            if n_trades < trades_threshold:
-                reward = -10000*max(0,trades_threshold-n_trades) # buy hold and immediate sell
-            '''
+        penalty = -1000000 # try to keep this equal to that in R7!
+        
+        #self.r_util[0] += 1
+        
+        reward = 0 
+        if at == 1 or at == 2:
+            # a trade 
+            if impossible:
+                reward = penalty
             else:
-                p_val = agent.balance + agent.inventory_value # portfolio value
-                bh_val = pt*agent.n_budget # buy hold value
-                reward = p_val-bh_val
-            '''
-        return reward
+                reward = 1000000
+                
+        '''
+        TODO CHANGE REWARDTYPE HERE AFTER EPISODES
+        this is 
+        '''
+        
+        return reward/1000
+    
 
 #%%
-def formatPrice(n):
-    if n>=0:
-        curr = "+$"
-    else:
-        curr = "-$"
-    return (curr +"{0:.2f}".format(abs(n)))
 
-def getData(key: str, window: int, colab = False) -> np.array:
-    if colab:
-        data = pd.read_csv("AE4350_Assignment/data/" + key + ".csv")
-    else:
-        data = pd.read_csv("data/" + key + ".csv")
-    data = data["Close*"].to_numpy()
-    data = data[::-1] # reverse because first date is latest
-    # moving average 
-    '''
-    data_maAdjusted = np.convolve(data, np.ones(window), 'valid')/window  
-    len_mismatch = len(data)-len(data_maAdjusted)
-    data_maAdjusted = np.pad(data_maAdjusted,(len_mismatch,0), "constant",constant_values=(data[:len_mismatch],0))
-    data_maAdjusted = data-data_maAdjusted
-    # cutoff irrelevant ma part
-    data_maAdjusted = data_maAdjusted[window:]
-    data = data[window:]
-    data_maAdjusted = data_maAdjusted[window:]
-    return data, data_maAdjusted
-    '''
-    # window is cutoff window
-    data = data[window:]
-    predata = data[:window]
-    return data, predata
-
-
-def getState(agent, data: np.array, t: int, window: int, use_rtn = True) -> np.array:
-    if t - window >= -1:
-        state = data[t - window+ 1:t+ 1]
-    else:
-        state = np.pad(data[0:t+1],(-(t-window+1),0),'constant',constant_values=(data[0],np.nan))
-    # scaling of state (standardization of input)
-    if use_rtn:
-        # use returns to scale, NOTE that we loose one data entry this way
-        state = state[1:]-state[:-1] # returns
-    else:
-        state = state[1:] # consistent length
+class UtilFuncs:
+    
+    def to_currency(n):
+        if n>=0:
+            curr = "+$"
+        else:
+            curr = "-$"
+        return (curr +"{0:.2f}".format(abs(n)))
+    
+    def get_data(key: str, window: int, colab = False) -> np.array:
+        if colab:
+            data = pd.read_csv("AE4350_Assignment/data/" + key + ".csv")
+        else:
+            data = pd.read_csv("data/" + key + ".csv")
+        data = data["Close*"].to_numpy()
+        data = data[::-1] # reverse because first date is latest
+        # moving average 
+        '''
+        data_maAdjusted = np.convolve(data, np.ones(window), 'valid')/window  
+        len_mismatch = len(data)-len(data_maAdjusted)
+        data_maAdjusted = np.pad(data_maAdjusted,(len_mismatch,0), "constant",constant_values=(data[:len_mismatch],0))
+        data_maAdjusted = data-data_maAdjusted
+        # cutoff irrelevant ma part
+        data_maAdjusted = data_maAdjusted[window:]
+        data = data[window:]
+        data_maAdjusted = data_maAdjusted[window:]
+        return data, data_maAdjusted
+        '''
+        # window is cutoff window
+        data = data[window:]
+        predata = data[:window]
+        return data, predata
+    
+    
+    def get_state(agent, data: np.array, t: int, window: int, utils: list, use_rtn = True) -> np.array:
         
-    state = 1/(1+np.exp(state))
-    
-    pvalue = agent.inventory_value+agent.balance # portfolio value
-    pvalue = (pvalue-agent.n_budget*data[t])/(agent.n_budget*data[t]) # standardize
-    append = [agent.balance/agent.budget,agent.inventory_value/agent.budget,pvalue]
-    state = np.append(state,append) # TODO, maybe clip these to max of 1?
-    
-    state = np.expand_dims(state,axis = 0)
-    return state
+        # unpack utils
+        l = utils[0] # length of full data 
+        n_holds = utils[1] # concurrent holds, resets after a sell/buy
+        
+        
+        
+        if t - window >= -1:
+            state = data[t - window+ 1:t+ 1]
+        else:
+            state = np.pad(data[0:t+1],(-(t-window+1),0),'constant',constant_values=(data[0],np.nan))
+        # scaling of state (standardization of input)
+        if use_rtn:
+            # use returns to scale, NOTE that we loose one data entry this way
+            state = state[1:]-state[:-1] # returns
+        else:
+            state = state[1:] # consistent length
+            
+        state = 1/(1+np.exp(state))
+        '''
+        pvalue = agent.inventory_value+agent.balance # portfolio value
+        pvalue = (pvalue-agent.n_budget*data[t])/(agent.n_budget*data[t]) # standardize
+        append = [agent.balance/agent.budget,agent.inventory_value/agent.budget,pvalue]
+        '''
+        pvalue = agent.inventory_value+agent.balance # portfolio value
+        pvalue_norm = (pvalue-agent.n_budget*data[t])/(agent.n_budget*data[t]) # standardize
+        balance_norm = (agent.balance-data[t])/pvalue
+        invent_norm =  (agent.inventory_value-data[t])/pvalue
+        nholds_norm = n_holds/l # time duration of current hold position, resets at buy/sell
+        holding = float(len(agent.inventory)) # binary, whether or not we have a stock
+        append = [balance_norm,invent_norm,pvalue_norm, nholds_norm, holding]
+        
+        state = np.append(state,append) # TODO, maybe clip these to max of 1?
+        
+        state = np.expand_dims(state,axis = 0)
+        return state
 
 
-    
-
-
+    def break_deadlock(agent,action: int, episode: int, utils, on = False):
+        '''
+        Function which changes the action proposed to encourage exploration
+        and avoid a deadlock in which the prob for hold essentially destroys
+        exploration
+        Notice that we only adapt the action and not the probability of those 
+        actions. Hence we 'hacked' the system by false presenting an 
+        exploratory action which higher probability
+        
+        aim: is to allow for more exploration but avoid the 'impossible' 
+        penalties thereby allow the system to raise the probabilities 
+        of buy/sell actions 
+        (suggesting actions that result in the impossible penalty would 
+         actually have an adverse effect wrt to goal)
+        '''
+        
+        if on and episode < 100 and action == 0:
+            prob = utils[0]
+            price = utils[1]
+            
+            action = choice(range(3), p = [1-2*prob, prob, prob]) #[2/3, 1/6, 1/6]
+            if action == 1:                
+                if len(agent.inventory) == 0 and agent.balance > price:
+                    b = 1
+                else:
+                    
+                    action = 0 
+            elif action == 2:
+                if len(agent.inventory) > 0:
+                    b = 1
+                else:
+                    # otherwise would be impossible 
+                    action = 0 
+                
+        return action
 
 
 
