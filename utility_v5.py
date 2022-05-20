@@ -614,7 +614,7 @@ class Agent:
         impossible = util_lst[6] # invalid action 
         l = util_lst[7] # length of data
         
-        penalty = -1000000
+        penalty = -10 # -1000000
         trades_threshold = 3 # at least howmany sales (buys not counted)!
         power = 0
         hold_scale = 10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
@@ -697,7 +697,7 @@ class Agent:
         n_holds = util_lst[5] # concurrent holds, resets after a sell/buy
         impossible = util_lst[6] # invalid action 
         
-        penalty = -1000000 # try to keep this equal to that in R7!
+        penalty = -10 # try to keep this equal to that in R7!
         
         #self.r_util[0] += 1
         
@@ -707,7 +707,7 @@ class Agent:
             if impossible:
                 reward = penalty
             else:
-                reward = 1000000
+                reward = -1*penalty # positive reward
                 
         '''
         TODO CHANGE REWARDTYPE HERE AFTER EPISODES
