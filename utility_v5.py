@@ -295,10 +295,11 @@ class Agent:
         self.inventory_value = len(self.inventory)*cur_price # current value of sum of stocks
         # notice that we dont change the buy prices of stocks in self.inventory!
         
-    def check_threshold(self):
+    def check_threshold(self, utils, terminateFunc_on = False):
+        n_impossible = utils[0]
         is_terminal = False
-        a = 2
-        if a ==3: # wont trigger
+
+        if n_impossible <= 20 and terminateFunc_on: # wont trigger
         #if (self.balance+self.inventory_value) < self.is_terminal_threshold or self.balance < 0:
             # terminal state reached, raise flag
             is_terminal = True
@@ -629,10 +630,10 @@ class Agent:
         impossible = util_lst[6] # invalid action 
         l = util_lst[7] # length of data
         
-        penalty = -100 # -1000000
+        penalty = -10 # -10 # -1000000
         trades_threshold = 3 # at least howmany sales (buys not counted)!
         power = 0
-        hold_scale = 3 #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
+        hold_scale = 10 #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
 
         reward = 0
         #if n_trades != 0:
@@ -712,7 +713,7 @@ class Agent:
         n_holds = util_lst[5] # concurrent holds, resets after a sell/buy
         impossible = util_lst[6] # invalid action 
         
-        penalty = -100 # try to keep this equal to that in R7!
+        penalty = -100 # -10 # try to keep this equal to that in R7!
         
         #self.r_util[0] += 1
         
@@ -722,7 +723,7 @@ class Agent:
             if impossible:
                 reward = penalty
             else:
-                reward = -1/4*penalty #-1/4*penalty # positive reward
+                reward = -1/4*penalty #-1*penalty # positive reward
                 
         '''
         TODO CHANGE REWARDTYPE HERE AFTER EPISODES
