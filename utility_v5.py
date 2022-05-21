@@ -299,7 +299,7 @@ class Agent:
         n_impossible = utils[0]
         is_terminal = False
 
-        if n_impossible <= 20 and terminateFunc_on: # wont trigger
+        if n_impossible >= 20 and terminateFunc_on: # wont trigger
         #if (self.balance+self.inventory_value) < self.is_terminal_threshold or self.balance < 0:
             # terminal state reached, raise flag
             is_terminal = True
