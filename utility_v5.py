@@ -284,8 +284,8 @@ class Agent:
         
         self.save_attributes() # save all simple attibutes
         
-    def setup_validation(self):
-        os.mkdir(os.path.join(self.checkpoint_path,"validation"))
+    def setup_validation(self, validation_dir):
+        os.mkdir(os.path.join(os.path.join(os.getcwd(),validation_dir),"validation"))
         
     
     def update_balance(self, change: float):
@@ -306,14 +306,29 @@ class Agent:
         return is_terminal 
         
     def reset(self, start_price):
+        '''
+        Resets all relevant attributes for next run
+        '''
         self.balance = 0.
         self.inventory = [start_price]*self.n_budget
+        self.budget = self.n_budget*start_price # for validation cell this also has to be reset
         # inventory contains price at which BOUGHT, and is not updated which cur_price
         self.inventory_value = start_price*self.n_budget
         self.inventory_conj = [] 
         # conjugate of inventory, contains price at which we SOLD
         self.r_util = np.zeros(10)
         
+    def validation_extraCash(self, extraCash):
+        '''
+        In the validation case the growth of the stock can prevent the system 
+        from buying and thereby participating in only part of the run.
+        This function provides an additional cash infusion which should not 
+        alter the profit obtained as the budget is adjusted as well
+        
+        Note: function must be called after reset!
+        '''
+        self.balance = extraCash # instead of zero
+        self.budget += extraCash 
     '''
     ======================== MODEL RELATED ===============================
     ''' 
@@ -617,7 +632,7 @@ class Agent:
         penalty = -10 # -1000000
         trades_threshold = 3 # at least howmany sales (buys not counted)!
         power = 0
-        hold_scale = 10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
+        hold_scale = 10 #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
 
         reward = 0
         #if n_trades != 0:
@@ -707,7 +722,7 @@ class Agent:
             if impossible:
                 reward = penalty
             else:
-                reward = -1*penalty # positive reward
+                reward = -1*penalty #-1/4*penalty # positive reward
                 
         '''
         TODO CHANGE REWARDTYPE HERE AFTER EPISODES
