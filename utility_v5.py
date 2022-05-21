@@ -303,7 +303,7 @@ class Agent:
         #if (self.balance+self.inventory_value) < self.is_terminal_threshold or self.balance < 0:
             # terminal state reached, raise flag
             is_terminal = True
-            print("=== Terminating trial === ")
+            #print("=== Terminating trial === ")
         return is_terminal 
         
     def reset(self, start_price):
