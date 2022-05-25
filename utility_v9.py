@@ -1127,7 +1127,7 @@ class Statistics:
         self.profits.append(profit)
         self.rewards.append(reward)
         self.actor_local_losses.append(float(actor_local_loss))
-        self.actions.append(action)
+        self.actions.append(int(action))
         
     def collect_episode(self,agent,episode, utils):
         self.growth = (np.array(self.balances)+np.array(self.inventories)-agent.budget).tolist() # 
@@ -1135,9 +1135,9 @@ class Statistics:
 
         self.totalReward_list.append(self.total_reward)
         self.lastLosses_list.append(self.actor_local_losses[-1])
-        self.impossible_list.append(self.n_impossible)
-        self.trades_list.append(self.n_impossible)
-        self.tradeRatio_list.append(self.n_impossible/self.n_1or2)
+        self.impossible_list.append(int(self.n_impossible))
+        self.trades_list.append(int(self.n_impossible))
+        self.tradeRatio_list.append(float(self.n_impossible/self.n_1or2))
         
         episode_name = "e{}".format(episode)
         self.everyProfit_dct[episode_name] = self.profits
@@ -1154,6 +1154,7 @@ class Statistics:
     ============= LOAD/SAVE RELATED =====================
     '''
     def save_statistics(self, episode: int):
+        self.reset_episode() # reset all other lists to save memory
         attr_dct = self.__dict__ 
         with open('./{0}/e{1}/e{1}_statistics.json'.format(self.checkpoint_dir,episode), 'w') as fp:
             json.dump(attr_dct, fp)
