@@ -243,8 +243,8 @@ class Agent:
     '''    
     def __init__(self, state_size, batch_size,
                  hidden_units, regularizer,
-                 start_price, n_budget, is_terminal_threshold, 
-                 checkpoint_dir: str,rewardType = 1, data_extraWindow = 1, is_eval = False):
+                 start_price, n_budget, is_terminal_threshold: int , 
+                 checkpoint_dir: str,rewardParams: dict, data_extraWindow = 1, is_eval = False):
         self.state_size = state_size+6 #+8 # +5 for additional states, see get_state
         self.action_size = 3
         self.buffer_size = 1000000
@@ -259,10 +259,17 @@ class Agent:
         self.gamma = 0.99
         self.tau = 0.001 #0.001 #2 #0.001
         self.actor_local_loss = 1.
-        self.rewardType = rewardType
         self.data_extraWindow = data_extraWindow
         self.hidden_units = hidden_units
         self.regularizer = regularizer
+        
+        # reward function related
+        self.rewardType = rewardParams["rewardType"]
+        self.penalty = rewardParams["penalty"]
+        self.hold_scale = rewardParams["hold_scale"] 
+        self.trade_scale = rewardParams["trade_scale"]
+        self.trade_cost = rewardParams["trade_cost"] 
+        
         self.attr_dct = copy.deepcopy(self.__dict__) # setup attirbute dictionary thusfar
         
         self.checkpoint_dir = checkpoint_dir
@@ -671,17 +678,21 @@ class Agent:
         l = util_lst[8] # length of data
         terminate = util_lst[9]
         
+        '''
         penalty = -1000 # -10 # -1000000
-        #trades_threshold = 3 # at least howmany sales (buys not counted)!
-        power = 0
         hold_scale = 10 #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
         trade_scale = 14
         trade_cost = 3 #2.5 #7# 5 # transaction cost
         #hold_bonus = 1 #2.5 # 1.5
+        '''
+        penalty = self.penalty # -10 # -1000000
+        hold_scale = self.hold_scale #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
+        trade_scale = self.trade_scale
+        trade_cost = self.trade_cost #2.5 #7# 5 # transaction cost
+        #hold_bonus = 1 #2.5 # 1.5
+        
         reward = 0
-        #if n_trades != 0:
-            
-        prob = at_prob[at]**0.2
+        prob = at_prob[at]**0.2 # probability of action transformed for better gradient
         if not terminate: 
             '''
             first if statement can be extended to all undesired strategies, 
@@ -980,7 +991,7 @@ class UtilFuncs:
         return action
     
     
-    def handle_action(agent, stats, action, data, t, flags):
+    def handle_action(agent, stats, action, data, t, flags, training = True):
         # unpack
         use_terminateFunc = flags[0]
         terminateFunc_on = flags[1]
@@ -1005,6 +1016,23 @@ class UtilFuncs:
                 
                 change = -data[t]
                 stats.buy_ind.append(t)
+                stats.n_trades += 1
+                stats.n_holds = 0 # reset counter
+            elif not training and agent.balance < data[t] and len(agent.inventory) == 0:
+                '''
+                In this statement extra cash required is recorded for the validation case
+                This is done as to not hinder the validation process due to a single 
+                bad trade
+                
+                notice the sign of agent.balance < data is reversed
+                '''
+
+                stats.extraCash += data[t] - agent.balance # extra cash required for purchase
+                stats.xtr_ind.append(t)
+                agent.reset(data[t]) # reset the portfolio
+                profit = 0 
+                
+                #stats.buy_ind.append(t)
                 stats.n_trades += 1
                 stats.n_holds = 0 # reset counter
             else:
@@ -1045,6 +1073,32 @@ class UtilFuncs:
             terminate, term_msg = agent.check_threshold(utils_term, terminateFunc_on= terminateFunc_on)
     
         return action, profit, impossible, terminate, term_msg
+    
+    
+    def plot_data(agent, data, data_extra, data_extraWindow, window_size, training = True):
+        if training:
+            msg = "Training"
+        else:
+            msg = 'Test'
+        fig = pgo.Figure()
+        fig.update_layout(showlegend=True, title_text ="{} data".format(msg))
+        fig.add_trace(pgo.Scatter(x=np.arange(len(data)), y=data,
+                            mode='lines',
+                            name='stock growth'))
+        fig.add_trace(pgo.Scatter(x=np.arange(len(data_extra)), y=data_extra,
+                            mode='lines',
+                            name='predata W ={}'.format(data_extraWindow)))
+        fig.show()
+        growth_buyhold_per = (data[-1]-data[window_size])/data[window_size]
+        
+        print("Naive buy & hold strategy on {1} data has a portfolio growth of {0}% per asset bought".format(round(growth_buyhold_per,3),msg))
+        growth_buyhold_cash = agent.n_budget*data[window_size]*growth_buyhold_per
+        growth_buyhold = (agent.n_budget*(data-data[window_size]))[window_size:-1]
+        print("For current budget of {0}, this means {1} stocks bought results in a final portfolio growth of {2} (i.e. final value ={3})".format(UtilFuncs.to_currency(agent.n_budget*data[window_size]),
+                                                                                            agent.n_budget,
+                                                                                            UtilFuncs.to_currency(growth_buyhold_cash),
+                                                                                            UtilFuncs.to_currency(growth_buyhold_cash+agent.n_budget*data[window_size])))
+        return growth_buyhold
 
 #%% Statistics container
 class Statistics:
@@ -1053,18 +1107,20 @@ class Statistics:
     of performance and other useful statistics and helps avoid cluttering of 
     the code
     '''
-    def __init__(self, checkpoint_dir):
+    def __init__(self, checkpoint_dir, training = True):
         self.checkpoint_dir = checkpoint_dir
+        self.training = training
         
     def reset_episode(self):
         '''
         Function that resets all relevant counters and containers
         '''
-        self.total_reward = 0 # total profit resets every epsiode 
+        self.total_reward = 0. # total profit resets every epsiode 
         self.n_trades = 0 
         self.n_impossible = 0 
         self.n_holds = 0 
         self.n_1or2 = 1 # 1 not zero because we cant have division by zero 
+        self.extraCash = 0.
         
         self.profits = []
         self.balances = []
@@ -1073,6 +1129,7 @@ class Statistics:
         self.actor_local_losses = []
         self.buy_ind = []
         self.sell_ind = []
+        self.xtr_ind = []
         self.growth =[]
         self.compete = []
         self.trades_list = []
@@ -1136,7 +1193,7 @@ class Statistics:
         self.totalReward_list.append(self.total_reward)
         self.lastLosses_list.append(self.actor_local_losses[-1])
         self.impossible_list.append(int(self.n_impossible))
-        self.trades_list.append(int(self.n_impossible))
+        self.trades_list.append(int(self.n_trades))
         self.tradeRatio_list.append(float(self.n_impossible/self.n_1or2))
         
         episode_name = "e{}".format(episode)
@@ -1187,12 +1244,15 @@ class Statistics:
         window_size = utils[1]
         fig = pgo.Figure() # figure 
         fig.update_layout(showlegend=True, xaxis_range=[window_size, l], 
-                          title_text = "E{3} final profit RL: {0} vs buyhold: {1}, difference = {2}| impossible/trades ={4}/{5}={6}".format(round(self.growth[-1],2),
-                                                                                                                    round(self.growth_buyhold[-1],2),
-                                                                                                                    round((self.growth[-1]-self.growth_buyhold[-1]),2),episode,
-                                                                                                                    self.trades_list[-1]-1,
-                                                                                                                    self.impossible_list[-1],
-                                                                                                                    round(self.tradeRatio_list[-1],2)))
+                          title_text = "E{3} final profit RL: {0} vs buyhold: {1}, \
+                              difference = {2}| impossible/trades ={4}/{5}={6} | extracash = {7}" \
+                                  .format(round(self.growth[-1],2),
+                                                round(self.growth_buyhold[-1],2),
+                                                round((self.growth[-1]-self.growth_buyhold[-1]),2),episode,
+                                                self.impossible_list[-1],
+                                                self.n_1or2-1,
+                                                round(self.tradeRatio_list[-1],2),
+                                                round(self.extraCash,2)))
         # buy/sell traces
         x = np.arange(len(data))
         fig.add_trace(pgo.Scatter(x=x, y=data,
@@ -1206,6 +1266,10 @@ class Statistics:
         fig.add_trace(pgo.Scatter(x=self.sell_ind, y=data[self.sell_ind], marker_color = "red",
                             mode='markers',
                             name='sell',
+                            legendgroup = '1'))
+        fig.add_trace(pgo.Scatter(x=self.xtr_ind, y=data[self.xtr_ind], marker_color = "yellow",
+                            mode='markers',
+                            name='extraCash',
                             legendgroup = '1'))
         # growth traces
         x = np.arange(window_size,window_size+len(data))
@@ -1221,5 +1285,10 @@ class Statistics:
         
         if show_figs:
             fig.show(render = "browser")
-        fig.write_html("./{0}/results/e{1}_trades.html".format(self.checkpoint_dir,episode))
+            
+        if self.training:
+            fig.write_html("./{0}/results/e{1}_trades.html".format(self.checkpoint_dir,episode))
+        else:
+            # validation set
+            fig.write_html("./{0}/results/e{1}_TestTrades.html".format(self.checkpoint_dir,episode))
         fig.data = [] # reset traces
