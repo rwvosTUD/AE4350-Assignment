@@ -756,7 +756,7 @@ class Agent:
             '''
 
         else:
-            reward = -10000
+            reward = 0 #-10000
         return reward/1000
     
     
@@ -1087,6 +1087,7 @@ class Statistics:
         self.everyProfit_dct = {}
         self.everyBalance_dct = {}
         self.everyReward_dct = {}
+        self.everyAction_dct = {}
         self.everyInventory_dct = {}
         self.everyGrowth_dct = {}
         self.everyGrowth_dct["buyhold"] = self.growth_buyhold
@@ -1110,9 +1111,8 @@ class Statistics:
         self.profits = np.pad(self.profits,(0,l-t-1),'constant',constant_values=(0,0)).tolist()
         self.rewards = np.pad(self.rewards,(0,l-t-1),'constant',constant_values=(0,0)).tolist()
         self.actor_local_losses = np.pad(self.actor_local_losses,(0,l-t-1),'constant',constant_values=(0,self.actor_local_losses[-1])).tolist()
-        '''
-        todo include actions?
-        '''
+        self.actions = np.pad(self.actions,(0,l-t-1),'constant',constant_values=(0,-1)).tolist()
+
     
     def collect_iteration(self,agent,utils):
         # unpack
@@ -1147,6 +1147,7 @@ class Statistics:
         self.everyGrowth_dct[episode_name] = self.growth
         self.everyCompete_dct[episode_name] = self.compete
         self.everyLoss_dct[episode_name] = self.actor_local_losses
+        self.everyAction_dct[episode_name] = self.actions
 
 
     '''
@@ -1206,6 +1207,7 @@ class Statistics:
                             name='sell',
                             legendgroup = '1'))
         # growth traces
+        x = np.arange(window_size,window_size+len(data))
         fig.add_trace(pgo.Scatter(x=x, y=np.array(self.growth), marker_color = "red",
                             mode='lines',
                             name='growth-RL',
