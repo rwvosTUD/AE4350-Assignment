@@ -783,15 +783,16 @@ class Agent:
         #self.r_util[0] += 1
         
         reward = 0 
+        prob = at_prob[at]**0.2
         if at == 1 or at == 2:
             # a trade 
             if impossible:
-                reward = penalty*at_prob[at]
+                reward = penalty*prob
             else:
-                reward = -1/20*penalty*at_prob[at] #-1*penalty # positive reward
+                reward = -1/20*penalty*prob #-1*penalty # positive reward
         else:
             hold_penalty = min((-np.exp((n_holds-100)/l*hold_scale)+1),0)
-            reward = hold_penalty*at_prob[at]
+            reward = hold_penalty*prob
         '''
         TODO CHANGE REWARDTYPE HERE AFTER EPISODES
         this is 
@@ -976,12 +977,74 @@ class UtilFuncs:
                 else:
                     # otherwise would be impossible 
                     action = 0 
-                
         return action
     
     
-    
+    def handle_action(agent, stats, action, data, t, flags):
+        # unpack
+        use_terminateFunc = flags[0]
+        terminateFunc_on = flags[1]
         
+        # initialize
+        profit = 0 
+        change = 0 
+        impossible = False
+
+        
+        if action == 0:
+            stats.n_holds += 1
+
+        elif action == 1:
+            stats.n_1or2 += 1
+            if agent.balance > data[t] and len(agent.inventory) == 0: #max one stock 
+                # BUYING stock, only if there is balance though
+                agent.inventory.append(data[t])
+                sold_price = agent.inventory_conj.pop(0)
+                
+                profit = sold_price - data[t]
+                
+                change = -data[t]
+                stats.buy_ind.append(t)
+                stats.n_trades += 1
+                stats.n_holds = 0 # reset counter
+            else:
+                impossible = True
+                stats.n_impossible += 1
+                stats.n_holds += 1 # effectively no buy is a hold
+                if not use_terminateFunc:
+                    terminate = True
+                    term_msg = "impossibles"
+            
+        elif action == 2:
+            stats.n_1or2 += 1
+            if len(agent.inventory) > 0: 
+                # SELLING stock, only if there are stocks held
+
+                bought_price = agent.inventory.pop(0)
+                agent.inventory_conj.append(data[t])
+                
+                profit = data[t] - bought_price 
+
+                change = data[t]
+                stats.sell_ind.append(t)
+                stats.n_trades += 1
+                stats.n_holds = 0 # reset counter
+            else:
+                impossible = True
+                stats.n_impossible += 1
+                stats.n_holds += 1 # effectively no sell is a hold
+                if not use_terminateFunc:
+                    terminate = True
+                    term_msg = "impossibles"
+        
+        # update and check termination condition
+        agent.update_balance(change)
+        agent.update_inventory(data[t])
+        if use_terminateFunc:
+            utils_term = [stats.n_impossible, np.min(data[(t+1):])]
+            terminate, term_msg = agent.check_threshold(utils_term, terminateFunc_on= terminateFunc_on)
+    
+        return action, profit, impossible, terminate, term_msg
 
 #%% Statistics container
 class Statistics:
