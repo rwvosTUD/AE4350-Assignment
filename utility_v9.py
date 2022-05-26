@@ -731,7 +731,8 @@ class Agent:
                     #reward = max(-1*(pt-pt1)*ratio,0)
                     #reward = -1*(pt-pt1)*ratio
                     #reward = -1*(pt-pt1)*ratio*hold_bonus
-                    reward = -1*(pt-pt1)*prob
+                    reward = (-1*(pt-pt1) + hold_penalty)*prob
+
 
                 
             elif at == 1:
