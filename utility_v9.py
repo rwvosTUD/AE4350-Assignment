@@ -767,7 +767,7 @@ class Agent:
             '''
 
         else:
-            reward = -10000
+            reward = 0 #-10000
         return reward/1000
     
     
