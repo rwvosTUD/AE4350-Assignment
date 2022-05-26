@@ -695,7 +695,7 @@ class Agent:
         prob = at_prob[at]**0.2 # probability of action transformed for better gradient
         if not terminate: 
             '''
-            first if statement can be extended to all undesired strategies, 
+            # first if statement can be extended to all undesired strategies, 
             (rewarding zero reward from the start), these include:
                 - n_trades == 0: buy hold 
                 - 
@@ -1038,6 +1038,7 @@ class UtilFuncs:
             else:
                 impossible = True
                 stats.n_impossible += 1
+                stats.imp_ind.append(t)
                 stats.n_holds += 1 # effectively no buy is a hold
                 if not use_terminateFunc:
                     terminate = True
@@ -1060,6 +1061,7 @@ class UtilFuncs:
             else:
                 impossible = True
                 stats.n_impossible += 1
+                stats.imp_ind.append(t)
                 stats.n_holds += 1 # effectively no sell is a hold
                 if not use_terminateFunc:
                     terminate = True
@@ -1130,10 +1132,12 @@ class Statistics:
         self.buy_ind = []
         self.sell_ind = []
         self.xtr_ind = []
+        self.imp_ind = []
         self.growth =[]
         self.compete = []
         self.trades_list = []
         self.actions = []
+        
             
     def reset_all(self,growth_buyhold: np.array):
         self.growth_buyhold = growth_buyhold.tolist() # used later
@@ -1168,7 +1172,7 @@ class Statistics:
         self.profits = np.pad(self.profits,(0,l-t-1),'constant',constant_values=(0,0)).tolist()
         self.rewards = np.pad(self.rewards,(0,l-t-1),'constant',constant_values=(0,0)).tolist()
         self.actor_local_losses = np.pad(self.actor_local_losses,(0,l-t-1),'constant',constant_values=(0,self.actor_local_losses[-1])).tolist()
-        self.actions = np.pad(self.actions,(0,l-t-1),'constant',constant_values=(0,-1)).tolist()
+        self.actions = np.pad(self.actions,(0,l-t-1),'constant',constant_values=(0,-1)).tolist() # -1 as to easily recognize
 
     
     def collect_iteration(self,agent,utils):
@@ -1208,7 +1212,7 @@ class Statistics:
 
 
     '''
-    ============= LOAD/SAVE RELATED =====================
+    ============= LOAD/SAVE/PLOT RELATED =====================
     '''
     def save_statistics(self, episode: int):
         self.reset_episode() # reset all other lists to save memory
@@ -1244,8 +1248,7 @@ class Statistics:
         window_size = utils[1]
         fig = pgo.Figure() # figure 
         fig.update_layout(showlegend=True, xaxis_range=[window_size, l], 
-                          title_text = "E{3} final profit RL: {0} vs buyhold: {1}, \
-                              difference = {2}| impossible/trades ={4}/{5}={6} | extracash = {7}" \
+                          title_text = "E{3} final profit RL: {0} vs buyhold: {1}, difference = {2}| impossible/trades ={4}/{5}={6} | extracash = {7}" \
                                   .format(round(self.growth[-1],2),
                                                 round(self.growth_buyhold[-1],2),
                                                 round((self.growth[-1]-self.growth_buyhold[-1]),2),episode,
@@ -1253,7 +1256,7 @@ class Statistics:
                                                 self.n_1or2-1,
                                                 round(self.tradeRatio_list[-1],2),
                                                 round(self.extraCash,2)))
-        # buy/sell traces
+        # buy/sell traces imposed on data line
         x = np.arange(len(data))
         fig.add_trace(pgo.Scatter(x=x, y=data,
                             mode='lines',
@@ -1267,20 +1270,26 @@ class Statistics:
                             mode='markers',
                             name='sell',
                             legendgroup = '1'))
-        fig.add_trace(pgo.Scatter(x=self.xtr_ind, y=data[self.xtr_ind], marker_color = "yellow",
+        # impossible/extra cash traces imposed on data line
+        fig.add_trace(pgo.Scatter(x=self.xtr_ind, y=data[self.xtr_ind], marker_color = "black",
                             mode='markers',
                             name='extraCash',
-                            legendgroup = '1'))
+                            legendgroup = '2'))
+        fig.add_trace(pgo.Scatter(x=self.imp_ind, y=data[self.imp_ind], marker_color = "orange",
+                            mode='markers',
+                            name='impossibles',
+                            legendgroup = '2'))
+        
         # growth traces
         x = np.arange(window_size,window_size+len(data))
         fig.add_trace(pgo.Scatter(x=x, y=np.array(self.growth), marker_color = "red",
                             mode='lines',
                             name='growth-RL',
-                            legendgroup = '2'))
+                            legendgroup = '3'))
         fig.add_trace(pgo.Scatter(x=x, y=np.array(self.growth_buyhold), marker_color = "green",
                             mode='lines',
                             name='growth-buyhold',
-                            legendgroup = '2'))
+                            legendgroup = '3'))
         #
         
         if show_figs:
