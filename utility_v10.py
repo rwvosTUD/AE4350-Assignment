@@ -373,7 +373,7 @@ class Agent:
         action is at least possible! otherwise we rake up reward penalties
         '''
         actions_prob = self.actor_local.model.predict(state)
-        action = np.argmax(actions_prob[0]) # greedy action
+        #action = np.argmax(actions_prob[0]) # greedy action
         self.last_state = state
         if not self.is_eval:
             '''
@@ -889,6 +889,7 @@ class UtilFuncs:
         l = utils[0] # length of full data 
         n_holds = utils[1] # concurrent holds, resets after a sell/buy
         n_trades = utils[2] # total amount of trades does not reset
+        tradeCost = utils[3]
 
         if t - window >= -1:
             state = data[t - window+ 1:t+ 1]
@@ -946,8 +947,8 @@ class UtilFuncs:
             bought_price = agent.inventory[0]
             sold_price = 0
         
-        buy_norm = (bought_price-data[t])/data[t]
-        sell_norm = (sold_price-data[t])/data[t]
+        buy_norm = (data[t]-bought_price-tradeCost)/data[t]
+        sell_norm = (sold_price-data[t]-tradeCost)/data[t]
         append = [balance_norm, nholds_norm, holding, ntrades_norm,
                   buy_norm, sell_norm]
         state = np.append(state,append) # TODO, maybe clip these to max of 1?
@@ -1005,7 +1006,14 @@ class UtilFuncs:
         
         if action == 0:
             stats.n_holds += 1
-
+            
+        #elif not training and action == 0 and agent.balance < np.min(data[(t+1):]) and not bool(agent.inventory):
+        #stats.n_holds += 1
+        #stats.extraCash += data[t] - agent.balance # extra cash required for purchase
+        #stats.xtr_ind.append(t)
+        #agent.reset(data[t+1]) # reset the portfolio
+        
+        
         elif action == 1:
             stats.n_1or2 += 1
             if agent.balance > data[t] and len(agent.inventory) == 0: #max one stock 
