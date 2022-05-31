@@ -373,8 +373,10 @@ class Agent:
         action is at least possible! otherwise we rake up reward penalties
         '''
         actions_prob = self.actor_local.model.predict(state)
-        #action = np.argmax(actions_prob[0]) # greedy action
         self.last_state = state
+        prob = utils[0]
+        price = utils[1]
+        
         if not self.is_eval:
             '''
             No evaluation so allow for exploration.
@@ -386,25 +388,38 @@ class Agent:
             '''
             
             action = choice(range(3), p = actions_prob[0]) 
+            
+            # avoiding impossible
+            if action == 1:                
+                if len(self.inventory) == 0 and self.balance > price:
+                    b = 1
+                else:
+                    action = 0 
+            elif action == 2:
+                if len(self.inventory) > 0:
+                    b = 1
+                else:
+                    # otherwise would be impossible 
+                    action = 0 
 
         else:
             action = np.argmax(actions_prob[0])
             
-        prob = utils[0]
-        price = utils[1]
-            
-        # avoiding impossible
-        if action == 1:                
-            if len(self.inventory) == 0 and self.balance > price:
-                b = 1
-            else:
-                action = 0 
-        elif action == 2:
-            if len(self.inventory) > 0:
-                b = 1
-            else:
-                # otherwise would be impossible 
-                action = 0 
+            # avoiding impossible
+            if action == 1:                
+                if len(self.inventory) == 0 and self.balance > price:
+                    '''
+                    to allow for extra cash to flow correctly, we do not focus on the balance here 
+                    '''
+                    b = 1
+                else:
+                    action = 0 
+            elif action == 2:
+                if len(self.inventory) > 0:
+                    b = 1
+                else:
+                    # otherwise would be impossible 
+                    action = 0 
         return action, actions_prob
 
 
@@ -790,21 +805,23 @@ class Agent:
         l = util_lst[8] # length of data
         terminate = util_lst[9]
         
-        penalty = -10000 # -10 # try to keep this equal to that in R7!
-        hold_scale = 10
+        penalty = self.penalty # -10 # try to keep this equal to that in R7!
+        hold_scale = self.hold_scale
         #self.r_util[0] += 1
         
         reward = 0 
-        prob = at_prob[at]**0.2
+        #prob = at_prob[at]**0.2
+        prob = at_prob[at]
         if at == 1 or at == 2:
             # a trade 
             if impossible:
                 reward = penalty*prob
             else:
-                reward = -1/20*penalty*prob #-1*penalty # positive reward
+                # reward = -1/20*penalty*prob #-1*penalty # positive reward
+                reward = profit*prob #-1*penalty # positive reward
         else:
-            hold_penalty = min((-np.exp((n_holds-100)/l*hold_scale)+1),0)
-            reward = hold_penalty*prob
+            hold_penalty = min((-np.exp((n_holds-500)/l*hold_scale)+1),0)
+            reward = hold_penalty 
         '''
         TODO CHANGE REWARDTYPE HERE AFTER EPISODES
         this is 
@@ -1148,7 +1165,8 @@ class Statistics:
         self.actions = []
         
             
-    def reset_all(self,growth_buyhold: np.array):
+    def reset_all(self,budget: float, growth_buyhold: np.array):
+        self.budget = budget
         self.growth_buyhold = growth_buyhold.tolist() # used later
         self.totalReward_list = []
         self.lastLosses_list=[]
@@ -1190,6 +1208,7 @@ class Statistics:
         reward = utils[1]
         actor_local_loss = utils[2]
         action = utils[3]
+        t = utils[4]
         
         # append
         self.balances.append(agent.balance)
@@ -1198,10 +1217,14 @@ class Statistics:
         self.rewards.append(reward)
         self.actor_local_losses.append(float(actor_local_loss))
         self.actions.append(int(action))
+        growth = agent.balance+agent.inventory_value-self.budget-self.extraCash
+        self.growth.append(growth)
+        self.compete.append(growth-self.growth_buyhold[t]) 
+
         
     def collect_episode(self,agent,episode, utils):
-        self.growth = (np.array(self.balances)+np.array(self.inventories)-agent.budget).tolist() # 
-        self.compete = (np.array(self.growth)-np.array(self.growth_buyhold)).tolist() # compete vs buyhold
+        #self.growth = (np.array(self.balances)+np.array(self.inventories)-agent.budget).tolist() # 
+        #self.compete = (np.array(self.growth)-np.array(self.growth_buyhold)).tolist() # compete vs buyhold
 
         self.totalReward_list.append(self.total_reward)
         self.lastLosses_list.append(self.actor_local_losses[-1])
