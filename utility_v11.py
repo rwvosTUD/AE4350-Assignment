@@ -245,7 +245,7 @@ class Agent:
                  hidden_units, regularizer,
                  start_price, n_budget, is_terminal_threshold: int , tanh_scale,
                  checkpoint_dir: str,rewardParams: dict, data_extraWindow = 1, is_eval = False):
-        self.state_size = state_size+7 #+8 # +5 for additional states, see get_state
+        self.state_size = state_size+6 #+8 # +5 for additional states, see get_state
         self.action_size = 3
         self.buffer_size = 1000000
         self.batch_size = batch_size
@@ -751,7 +751,7 @@ class Agent:
             if at == 0:
                 # hold position; 
                 n_invent = len(agent.inventory) # stocks in inventory
-                hold_penalty = (-np.exp((n_holds-200)/l*hold_scale)+1)
+                hold_penalty = (-np.exp((n_holds-max_holds)/l*hold_scale)+1)
                 
                 if n_invent != 0:
                     # in case stock is held; reward growth
@@ -949,9 +949,8 @@ class UtilFuncs:
 
         #balance_norm = (agent.balance-data[t])/data[t]
         balance_bool = float(agent.balance-tradeCost > data[t])
-        nholds_norm = n_holds/2000 #(l-window) # time duration of current hold position, resets at buy/sell
+        nholds_norm = min(1,n_holds/agent.max_holds) #(l-window) # time duration of current hold position, resets at buy/sell
         holding = float(len(agent.inventory)) # binary, whether or not we have a stock
-        ntrades_norm = n_trades/2000 #(l-window) WE USE A CONSTANT FACTOR BECAUSE THIS SHOULD NOT MATTER IF IN VALIDATION
         if not bool(agent.inventory):
             # no stock sold yet so no sell price
             bought_price = 0
@@ -968,7 +967,7 @@ class UtilFuncs:
         sell_bool = float(bought_price+tradeCost < data[t])
         #sell_norm = (sold_price-data[t]-tradeCost)/data[t]
         profit_norm = profit/data[t]
-        append = [balance_bool, nholds_norm, holding, ntrades_norm,
+        append = [balance_bool, nholds_norm, holding,
                   buy_bool, sell_bool, profit_norm]
         state = np.append(state,append) # TODO, maybe clip these to max of 1?
         
@@ -1048,26 +1047,7 @@ class UtilFuncs:
                 stats.buy_ind.append(t)
                 stats.n_trades += 1
                 stats.n_holds = 0 # reset counter
-            elif not training and (agent.balance-agent.trade_cost) < data[t] and not bool(agent.inventory) and action_argmx == 1:
-                '''
-                In this statement extra cash required is recorded for the validation case
-                This is done as to not hinder the validation process due to a single 
-                bad trade
-                
-                notice the sign of agent.balance < data is reversed
-                '''
-
-                stats.extraCash += data[t] - agent.balance # extra cash required for purchase
-                stats.xtr_ind.append(t)
-                agent.reset(data[t]) # reset the portfolio
-                profit = 0 
-                
-                #stats.buy_ind.append(t)
-                stats.n_trades += 1
-                '''
-                TODO: count 
-                '''
-                stats.n_holds = 0 # reset counter
+            
             else:
                 impossible = True
                 stats.n_impossible += 1
@@ -1099,6 +1079,24 @@ class UtilFuncs:
                 if not use_terminateFunc:
                     terminate = True
                     term_msg = "impossibles"
+        
+        if not training and (agent.balance-agent.trade_cost) < data[t] and not bool(agent.inventory) and action_argmx == 1:
+            '''
+            In this statement extra cash required is recorded for the validation case
+            This is done as to not hinder the validation process due to a single 
+            bad trade
+            
+            notice the sign of agent.balance < data is reversed
+            '''
+
+            stats.extraCash += data[t] - agent.balance - agent.trade_cost # extra cash required for purchase
+            stats.xtr_ind.append(t)
+            agent.reset(data[t]) # reset the portfolio
+            profit = 0 
+            
+            #stats.buy_ind.append(t)
+            stats.n_trades += 1
+            stats.n_holds = 0 # reset counter
         
         if profit > 0:
             # good trade made 
