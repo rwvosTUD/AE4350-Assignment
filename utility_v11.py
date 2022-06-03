@@ -479,7 +479,7 @@ class Agent:
         self.critic_local.model.save_weights(os.path.join(self.checkpoint_path,"e{}".format(episode), 'critic_local.h5'))
         self.critic_target.model.save_weights(os.path.join(self.checkpoint_path,"e{}".format(episode), 'critic_target.h5'))
         # TODO; also save (hyper)parameters
-        np.savez_compressed(os.path.join(self.checkpoint_path,"e{}".format(episode), 'Rbuffer.npz'), 
+        np.savez_compressed(os.path.join(self.checkpoint_path, 'Rbuffer.npz'), 
                     a = self.memory.memory_state,
                     b = self.memory.memory_nextState, 
                     c = self.memory.memory_action,
