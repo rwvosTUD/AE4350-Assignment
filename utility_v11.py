@@ -23,7 +23,7 @@ class Actor:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''
-    def __init__(self, state_size, action_size, hidden_units, regularizer):
+    def __init__(self, state_size, action_size, hidden_units, regularizer, use_batchNorm):
         '''
         Initialize parameters and build model.
         Params
@@ -35,21 +35,26 @@ class Actor:
         self.action_size = action_size
         self.hidden_units = hidden_units
         self.regularizer = regularizer
+        self.use_batchNorm = use_batchNorm
         self.build_model()
 
     def build_model(self):
         states = tf.keras.layers.Input(shape=(self.state_size,), name='states')
         
         net = tf.keras.layers.Dense(units=self.hidden_units[0][0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
-        net = tf.keras.layers.BatchNormalization()(net)
+        if self.use_batchNorm:
+            net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
         net = tf.keras.layers.Dense(units=self.hidden_units[0][1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
-        net = tf.keras.layers.BatchNormalization()(net)
+        if self.use_batchNorm:
+            net = tf.keras.layers.BatchNormalization()(net)
         net = tf.keras.layers.Activation("relu")(net)
         # additional layers
 
         net = tf.keras.layers.Dense(units=self.hidden_units[0][2],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net)
-        net = tf.keras.layers.BatchNormalization()(net)
+        if self.use_batchNorm:
+            net = tf.keras.layers.BatchNormalization()(net)
+        
         net = tf.keras.layers.Activation("relu")(net)
 
         
@@ -117,7 +122,7 @@ class Critic:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''
-    def __init__(self, state_size, action_size, hidden_units, regularizer):
+    def __init__(self, state_size, action_size, hidden_units, regularizer, use_batchNorm):
         '''
         Initialize parameters and build model.
         Params
@@ -129,6 +134,7 @@ class Critic:
         self.action_size = action_size
         self.hidden_units = hidden_units
         self.regularizer = regularizer
+        self.use_batchNorm = use_batchNorm
         self.build_model()
 
     def build_model(self):
@@ -138,12 +144,14 @@ class Critic:
         
         # 
         net_states = tf.keras.layers.Dense(units=self.hidden_units[1][0],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(states)
-        net_states = tf.keras.layers.BatchNormalization()(net_states)
+        if self.use_batchNorm:
+            net_states = tf.keras.layers.BatchNormalization()(net_states)
         net_states = tf.keras.layers.Activation("relu")(net_states)
         net_states = tf.keras.layers.Dense(units=self.hidden_units[1][1],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net_states)
 
         # == additional layer
-        net_states = tf.keras.layers.BatchNormalization()(net_states)
+        if self.use_batchNorm:
+            net_states = tf.keras.layers.BatchNormalization()(net_states)
         net_states = tf.keras.layers.Activation("relu")(net_states)
         net_states = tf.keras.layers.Dense(units=self.hidden_units[1][2],kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))(net_states)
         # ==
@@ -241,38 +249,25 @@ class Agent:
     Created on Thu May 12 13:22:50 2022
     @author: Reinier Vos, 4663160-TUD
     '''    
-    def __init__(self, state_size, batch_size,
-                 hidden_units, regularizer,
-                 start_price, n_budget, is_terminal_threshold: int , tanh_scale,
-                 checkpoint_dir: str,rewardParams: dict, data_extraWindow = 1, is_eval = False):
-        self.state_size = state_size+6 #+8 # +5 for additional states, see get_state
+    def __init__(self, modelParams, start_price,
+                 checkpoint_dir: str,rewardParams: dict, is_eval = False):
+        # model general related attributes
+        for key in modelParams:
+            setattr(self, key, modelParams[key])
+            
+        self.state_size = self.window_size + 6 #+8 # +5 for additional states, see get_state
         self.action_size = 3
         self.buffer_size = 1000000
-        self.batch_size = batch_size
-        
-        self.n_budget = n_budget # number of stocks in budget
         self.budget = self.n_budget*start_price
         self.balance = 0. # balance parameter will be adapted
-        
-        self.is_terminal_threshold = is_terminal_threshold # howmany impossibles
         self.is_eval = is_eval
-        self.gamma = 0.999 # 0.99
-        self.tau = 0.001 #0.001 #2 #0.001
-        self.actor_local_loss = 1.
-        self.data_extraWindow = data_extraWindow
-        self.hidden_units = hidden_units
-        self.regularizer = regularizer
-        self.tanh_scale = tanh_scale
         
         # reward function related
-        self.rewardType = rewardParams["rewardType"]
-        self.penalty = rewardParams["penalty"]
-        self.hold_scale = rewardParams["hold_scale"] 
-        self.trade_scale = rewardParams["trade_scale"]
-        self.trade_cost = rewardParams["trade_cost"]
-        self.max_holds = rewardParams["max_holds"]
+        for key in rewardParams:
+            setattr(self, key, rewardParams[key])
         
         self.attr_dct = copy.deepcopy(self.__dict__) # setup attirbute dictionary thusfar
+        self.actor_local_loss = 1. #initiliaze
         
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_path = os.path.join(os.getcwd(),self.checkpoint_dir)
@@ -290,11 +285,11 @@ class Agent:
         self.reset(start_price)
         self.set_rewardtype(self.rewardType)
         self.memory = ReplayBuffer(self.state_size, self.action_size, self.buffer_size, self.batch_size)
-        self.actor_local = Actor(self.state_size, self.action_size, self.hidden_units, self.regularizer)
-        self.actor_target = Actor(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
+        self.actor_local = Actor(self.state_size, self.action_size, self.hidden_units, self.regularizer, self.use_batchNorm)
+        self.actor_target = Actor(self.state_size, self.action_size,  self.hidden_units, self.regularizer, self.use_batchNorm)
 
-        self.critic_local = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
-        self.critic_target = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer)
+        self.critic_local = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer, self.use_batchNorm)
+        self.critic_target = Critic(self.state_size, self.action_size,  self.hidden_units, self.regularizer, self.use_batchNorm)
         
         self.critic_target.model.set_weights(self.critic_local.model.get_weights())
         self.actor_target.model.set_weights(self.actor_local.model.get_weights())
@@ -496,12 +491,17 @@ class Agent:
             self.critic_local.model.load_weights(os.path.join(checkpoint_path, 'e{}'.format(episode),'critic_local.h5'))
             self.critic_target.model.load_weights(os.path.join(checkpoint_path, 'e{}'.format(episode),'critic_target.h5'))
         if buffer:
-            Rbuffer = np.load(os.path.join(checkpoint_path, 'e{}'.format(episode),'Rbuffer.npz'))
+            Rbuffer = np.load(os.path.join(checkpoint_path,'Rbuffer.npz'))
             self.memory.memory_state = Rbuffer['a']
             self.memory.memory_nextState = Rbuffer['b']
             self.memory.memory_action = Rbuffer['c']
             self.memory.memory_reward = Rbuffer['d']
             self.memory.memory_dones = Rbuffer['e']
+            episode_iter = 4000
+            self.memory.memory_counter = int(episode*episode_iter) # APPROXIMATION
+            print("Set replay buffer memory counter to approx {0}*{1} = {2}".format(episode,
+                                                                                    episode_iter,
+                                                                                    self.memory.memory_counter))
             
         # TODO; also load (hyper)parameters
         print("Succesfully loaded (actor:{2}|critic:{3}|buffer:{4}) models from folder {0} and episode {1}".format(checkpoint_dir,
@@ -721,12 +721,12 @@ class Agent:
         penalty = self.penalty # -10 # -1000000
         hold_scale = self.hold_scale #10 # higher means heavier penalty, default at 10 = -35 at n_hold = 800
         trade_scale = self.trade_scale
-        trade_cost = self.trade_cost #2.5 #7# 5 # transaction cost
+        #trade_cost = self.trade_cost #2.5 #7# 5 # transaction cost
         max_holds = self.max_holds
         #hold_bonus = 1 #2.5 # 1.5
         
         reward = 0
-        prob = at_prob[at] # probability of action transformed for better gradient
+        prob = at_prob[at]**self.prob_power #**0.2 # probability of action transformed for better gradient
         if not terminate: 
             '''
             # first if statement can be extended to all undesired strategies, 
@@ -949,7 +949,7 @@ class UtilFuncs:
 
         #balance_norm = (agent.balance-data[t])/data[t]
         balance_bool = float(agent.balance-tradeCost > data[t])
-        nholds_norm = min(1,n_holds/agent.max_holds) #(l-window) # time duration of current hold position, resets at buy/sell
+        nholds_norm = min(1,n_holds/max(agent.max_holds, 100)) #(l-window) # time duration of current hold position, resets at buy/sell
         holding = float(len(agent.inventory)) # binary, whether or not we have a stock
         if not bool(agent.inventory):
             # no stock sold yet so no sell price
