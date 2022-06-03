@@ -1260,8 +1260,8 @@ class Statistics:
     def save_statistics(self, episode: int):
         self.reset_episode() # reset all other lists to save memory
         attr_dct = self.__dict__ 
-        with open('./{0}/e{1}/e{1}_statistics.json'.format(self.checkpoint_dir,episode), 'w') as fp:
-            json.dump(attr_dct, fp)
+        with open('./{0}/statistics.json'.format(self.checkpoint_dir,episode), 'w') as fp:
+            json.dump(attr_dct, fp) # this will overwrite!
         print("Succesfully saved e{0} statistics to results folder".format(episode))
 
         '''
