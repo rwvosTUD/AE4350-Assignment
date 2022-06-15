@@ -1434,12 +1434,13 @@ class UtilFuncs:
         
         #episode_start = np.random.randint(choice_start,choice_end)
         choice_prob = np.ones((choice_end-choice_start))/(choice_end-choice_start+expand*2*min(expand_i,10)) 
-        if extra == 0:
-            choice_prob[:expand] *= min(expand_i,10)
-            choice_prob[-expand:] *= min(expand_i,10)
-        else:
-            # front is not added
-            choice_prob[-(expand*2):] *= min(expand_i,10)
+        if choice_start != window_size and choice_end != l-episode_window-1:
+            if extra == 0:
+                choice_prob[:expand] *= min(expand_i,10)
+                choice_prob[-expand:] *= min(expand_i,10)
+            else:
+                # front is not added
+                choice_prob[-(expand*2):] *= min(expand_i,10)
         choice_prob /= np.sum(choice_prob) # additional normalization 
         
         episode_start = np.random.choice(np.arange(choice_start,
