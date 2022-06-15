@@ -634,7 +634,7 @@ class Agent:
             self.memory.memory_action = Rbuffer['c']
             self.memory.memory_reward = Rbuffer['d']
             self.memory.memory_dones = Rbuffer['e']
-            self.memory.memory_counter = int(Rbuffer['f'][0]) 
+            self.memory.memory_counter = int(Rbuffer['f']) 
             '''
             #int(episode*buffer_episode_size) # APPROXIMATION
             
