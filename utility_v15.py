@@ -1417,6 +1417,7 @@ class UtilFuncs:
         # unpack
         l = utils[0]
         offset = utils[1]
+        episode_window = utils[2]
     
         #
         window_size = agent.stateTS_size
@@ -1426,7 +1427,7 @@ class UtilFuncs:
 
         choice_start = max(start-expand_i*expand,window_size) 
         choice_end  = min(start+expand_i*expand + extra, 
-                          l-window_size-1) # -1 in case we use rwrd func that uses p_t+1
+                          l-episode_window-1) # -1 in case we use rwrd func that uses p_t+1
         
         #episode_start = np.random.randint(choice_start,choice_end)
         choice_prob = np.ones((choice_end-choice_start))/(choice_end-choice_start+expand*2*min(expand_i,10)) 
