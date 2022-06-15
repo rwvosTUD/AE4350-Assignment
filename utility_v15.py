@@ -616,7 +616,7 @@ class Agent:
         print("Succesfully saved models for episode {}".format(episode))
         
     def load_models(self, checkpoint_dir: str, episode:int, 
-                    actor = True, critic = True, buffer = False):
+                    actor = True, critic = True, buffer = False, using_colab = False):
         checkpoint_path = os.path.join(os.getcwd(),checkpoint_dir)
         if actor:
             self.actor_local.model.load_weights(os.path.join(checkpoint_path, 'e{}'.format(episode),'actor_local.h5'))
@@ -625,7 +625,10 @@ class Agent:
             self.critic_local.model.load_weights(os.path.join(checkpoint_path, 'e{}'.format(episode),'critic_local.h5'))
             self.critic_target.model.load_weights(os.path.join(checkpoint_path, 'e{}'.format(episode),'critic_target.h5'))
         if buffer:
-            Rbuffer = np.load(os.path.join(checkpoint_path,'Rbuffer.npz'))
+            if using_colab:
+                Rbuffer = np.load(os.path.join(checkpoint_path,'e{}'.format(episode),'Rbuffer.npz'))
+            else:
+                Rbuffer = np.load(os.path.join(checkpoint_path,'Rbuffer.npz'))
             self.memory.memory_state = Rbuffer['a']
             self.memory.memory_nextState = Rbuffer['b']
             self.memory.memory_action = Rbuffer['c']
