@@ -1400,7 +1400,7 @@ class UtilFuncs:
                     terminate = True
                     term_msg = "impossibles"
         
-        if not training and (agent.balance-agent.trade_cost) < data[t] and not bool(agent.inventory) and action_argmx == 1:
+        if not training and (agent.balance-agent.trade_cost) < data[t] and not bool(agent.inventory) and action_argmx == 1 and impossible:
             '''
             In this statement extra cash required is recorded for the validation case
             This is done as to not hinder the validation process due to a single 
@@ -1411,6 +1411,7 @@ class UtilFuncs:
 
             stats.extraCash += data[t] - agent.balance - agent.trade_cost # extra cash required for purchase
             stats.xtr_ind.append(t)
+            _ = stats.imp_ind.pop(-1) # ensure an impossible is now denoted as extracash instead
             agent.reset(data[t]) # reset the portfolio
             profit = 0 
             
