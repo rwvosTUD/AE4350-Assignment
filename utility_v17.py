@@ -1588,7 +1588,7 @@ class Statistics:
         self.rewards.append(reward)
         self.actor_local_losses.append(float(actor_local_loss))
         self.actions.append(int(action))
-        growth = agent.balance+agent.inventory_value-self.budget-self.extraCash
+        growth = agent.balance+agent.inventory_value-self.budget-2*self.extraCash-agent.TRADECOST_ACTUAL*self.n_trades
         self.growth.append(growth)
         self.compete.append(growth-self.growth_buyhold[t]) 
 
